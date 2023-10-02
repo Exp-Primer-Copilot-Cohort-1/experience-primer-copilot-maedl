@@ -1,57 +1,58 @@
 // create web server
-// create router
-// add router to web server
-// listen for requests
-// add comments to router
-// get comments from router
-// add comments to router
-// delete comments from router
-// update comments from router
-
-// create web server
 var express = require('express');
 var app = express();
-// create router
-var router = express.Router();
-// add router to web server
-app.use(router);
-// listen for requests
-var port = 3000;
-app.listen(port, function() {
-    console.log('Server running on port %s', port);
+// create http server
+var http = require('http');
+var server = http.createServer(app);
+// create socket.io server
+var io = require('socket.io').listen(server);
+// create mysql connection
+var mysql = require('mysql');
+var connection = mysql.createConnection({
+	host: 'localhost',
+	user: 'root',
+	password: 'root',
+	database: 'comments'
+});
+// connect to mysql
+connection.connect();
+
+// set view engine to ejs
+app.set('view engine', 'ejs');
+// set static folder
+app.use(express.static(__dirname + '/public'));
+
+// set default route
+app.get('/', function(req, res) {
+	res.render('index');
 });
 
-// add comments to router
-var comments = [];
-router.route('/comments')
-    // get comments from router
-    .get(function(request, response) {
-        response.json(comments);
-    })
-    // add comments to router
-    .post(function(request, response) {
-        var comment = request.body;
-        comments.push(comment);
-        response.json(comment);
-    });
+// socket.io server
+io.on('connection', function(socket) {
+	// get comments
+	socket.on('getComments', function(data) {
+		var sql = 'SELECT * FROM comments ORDER BY id DESC LIMIT 10';
+		connection.query(sql, function(err, rows, fields) {
+			if (err) {
+				throw err;
+			}
+			socket.emit('getComments', rows);
+		});
+	});
+	// add comment
+	socket.on('addComment', function(data) {
+		var sql = 'INSERT INTO comments (name, comment) VALUES (?, ?)';
+		var params = [data.name, data.comment];
+		connection.query(sql, params, function(err, rows, fields) {
+			if (err) {
+				throw err;
+			}
+			io.sockets.emit('addComment', data);
+		});
+	});
+});
 
-// delete comments from router
-router.route('/comments/:id')
-    .delete(function(request, response) {
-        var id = request.params.id;
-        comments = comments.filter(function(comment) {
-            return comment.id !== id;
-        });
-        response.json(comments);
-    });
-
-// update comments from router
-router.route('/comments/:id')
-    .put(function(request, response) {
-        var id = request.params.id;
-        var comment = request.body;
-        comments = comments.map(function(c) {
-            return c.id !== id ? c : comment;
-        });
-        response.json(comment);
-    });
+// listen to port 3000
+server.listen(3000, function() {
+	console.log('Server running at http://localhost:3000');
+});
